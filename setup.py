@@ -5,6 +5,10 @@ setup(
     version="1.1.0",
     description="CLI interfaces for GoHighLevel, Nextcloud, and Blotato APIs",
     author="Lead Gen Jay",
+    license="GPL-2.0-only",
+    classifiers=[
+        "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+    ],
     packages=find_namespace_packages(include=["cli_anything.*"]),
     package_data={
         "cli_anything.gohighlevel": ["skills/*.md"],

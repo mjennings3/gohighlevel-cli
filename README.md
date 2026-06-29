@@ -311,4 +311,5 @@ You only need the Firebase token if you want to **build** workflows. Everything 
 
 ## License
 
-Private / personal use.
+[GNU General Public License v2.0](LICENSE) (GPL-2.0). You may use, modify, and
+redistribute this software under the terms of GPL-2.0; it comes with NO warranty.
