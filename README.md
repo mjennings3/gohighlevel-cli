@@ -17,12 +17,12 @@ Built by [Lead Gen Jay](https://leadgenjay.com).
 
 ---
 
-## Install (60 seconds)
+## Install
 
 Requirements: **Python 3.10+** and a GoHighLevel sub-account.
 
 ```bash
-git clone <this repo> gohighlevel-cli
+git clone https://github.com/mjennings3/gohighlevel-cli.git
 cd gohighlevel-cli
 ./install.sh
 ```
