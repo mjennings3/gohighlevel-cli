@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# ghl-as — pick a GoHighLevel account profile (visual) and run the CLI as it.
+#
+# Profiles live in ~/.ghl/*.env (override dir with GHL_PROFILE_DIR).
+# Each file holds the credentials for one sub-account, e.g. ~/.ghl/clientA.env:
+#
+#     GHL_LABEL="Client A"        # optional friendly name shown in the picker
+#     GHL_API_KEY=pit-xxxx...     # that sub-account's Private Integration Token
+#     GHL_LOCATION_ID=AbCd123...  # that sub-account's Location ID
+#     # GHL_FIREBASE_REFRESH_TOKEN=...   # optional, only if building workflows
+#
+# Shared defaults that apply to every account go in ~/.ghl/common.env (same
+# format). Put your agency-wide GHL_FIREBASE_REFRESH_TOKEN there once. It loads
+# before the selected profile, so a profile can still override it if needed.
+#
+# Usage:
+#     ghl-as                      # visual picker, then drops into the REPL
+#     ghl-as contacts list        # visual picker, then runs that command
+#     ghl-as clientA              # skip the picker, use profile "clientA" (REPL)
+#     ghl-as clientA contacts list
+#
+# Uses fzf for the picker if installed; otherwise a numbered menu.
+
+set -euo pipefail
+
+# Resolve through symlinks so SCRIPT_DIR points at the real project dir.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [ "${SOURCE#/}" = "$SOURCE" ] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+PROFILE_DIR="${GHL_PROFILE_DIR:-$HOME/.ghl}"
+
+# --- collect available profiles --------------------------------------------
+names=()
+if [ -d "$PROFILE_DIR" ]; then
+  for f in "$PROFILE_DIR"/*.env; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f" .env)"
+    [ "$base" = "common" ] && continue   # shared defaults, not a selectable account
+    names+=("$base")
+  done
+fi
+
+if [ "${#names[@]}" -eq 0 ]; then
+  {
+    echo "No account profiles found in $PROFILE_DIR"
+    echo
+    echo "Create one, e.g.:  $PROFILE_DIR/clientA.env"
+    echo '    GHL_LABEL="Client A"'
+    echo "    GHL_AGENCY=ascend         # -> ~/.ghl/agencies/ascend.env (Firebase token)"
+    echo "    GHL_API_KEY=pit-xxxx..."
+    echo "    GHL_LOCATION_ID=AbCd123..."
+  } >&2
+  exit 1
+fi
+
+# label<TAB>location<TAB>agency for a profile, sourced in an isolated subshell
+profile_meta() {
+  (
+    set +u
+    # shellcheck disable=SC1090
+    . "$PROFILE_DIR/$1.env" >/dev/null 2>&1 || true
+    printf '%s\t%s\t%s' "${GHL_LABEL:-$1}" "${GHL_LOCATION_ID:-?}" "${GHL_AGENCY:-none}"
+  )
+}
+
+# --- determine the profile -------------------------------------------------
+PROFILE=""
+if [ "$#" -gt 0 ] && [ -f "$PROFILE_DIR/$1.env" ]; then
+  PROFILE="$1"; shift
+fi
+
+if [ -z "$PROFILE" ]; then
+  if command -v fzf >/dev/null 2>&1; then
+    line="$(
+      for n in "${names[@]}"; do
+        IFS=$'\t' read -r label loc agency <<<"$(profile_meta "$n")"
+        printf '%s\t%s\t%s\t%s\n' "$n" "$label" "[$agency]" "$loc"
+      done | fzf --delimiter=$'\t' --with-nth=2,3,4 --nth=2,3 \
+                 --prompt='GHL account ▸ ' \
+                 --header='Select a GoHighLevel account (label / agency / location)' \
+                 --height=40% --reverse
+    )"
+    PROFILE="${line%%$'\t'*}"
+  else
+    echo "Select a GoHighLevel account:" >&2
+    i=1
+    for n in "${names[@]}"; do
+      IFS=$'\t' read -r label loc agency <<<"$(profile_meta "$n")"
+      printf '  %2d) %-22s %-12s %s\n' "$i" "$label" "[$agency]" "$loc" >&2
+      i=$((i + 1))
+    done
+    printf 'Enter number (1-%d): ' "${#names[@]}" >&2
+    read -r choice
+    case "$choice" in
+      ''|*[!0-9]*) echo "Invalid selection." >&2; exit 1 ;;
+    esac
+    if [ "$choice" -lt 1 ] || [ "$choice" -gt "${#names[@]}" ]; then
+      echo "Out of range." >&2; exit 1
+    fi
+    PROFILE="${names[$((choice - 1))]}"
+  fi
+fi
+
+[ -n "$PROFILE" ] || { echo "No account selected." >&2; exit 1; }
+
+# --- load the profile and run the CLI as it --------------------------------
+# Which agency does this profile belong to? Read it WITHOUT sourcing so we can
+# load that agency's env (its Firebase token) between common and the profile.
+AGENCY="$(grep -E '^GHL_AGENCY=' "$PROFILE_DIR/$PROFILE.env" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"')"
+
+# Cascade (NOT the project .env, so nothing clobbers it):
+#   common.env  ->  agencies/<agency>.env  ->  <profile>.env   (profile wins)
+set -a
+# shellcheck disable=SC1090
+[ -f "$PROFILE_DIR/common.env" ] && . "$PROFILE_DIR/common.env"
+if [ -n "$AGENCY" ]; then
+  if [ -f "$PROFILE_DIR/agencies/$AGENCY.env" ]; then
+    # shellcheck disable=SC1090
+    . "$PROFILE_DIR/agencies/$AGENCY.env"
+  else
+    echo "Warning: profile '$PROFILE' references agency '$AGENCY' but" \
+         "$PROFILE_DIR/agencies/$AGENCY.env was not found." >&2
+    echo "         Public-API commands still work; workflow-building (internal API)" \
+         "will fail without that agency's Firebase token." >&2
+  fi
+fi
+# shellcheck disable=SC1090
+. "$PROFILE_DIR/$PROFILE.env"
+set +a
+
+: "${GHL_API_KEY:?profile '$PROFILE' is missing GHL_API_KEY}"
+: "${GHL_LOCATION_ID:?profile '$PROFILE' is missing GHL_LOCATION_ID}"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/.venv/bin/activate"
+echo "▸ ghl as ${GHL_LABEL:-$PROFILE}  [agency: ${AGENCY:-none}]  (location ${GHL_LOCATION_ID})" >&2
+exec cli-anything-gohighlevel "$@"
