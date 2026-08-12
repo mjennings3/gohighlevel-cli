@@ -49,8 +49,8 @@ Why two credential types matter:
 
 A profile file looks like:
 ```
-GHL_LABEL="The Lift"          # optional friendly name
-GHL_AGENCY=gmm                # -> ~/.ghl/agencies/gmm.env supplies the Firebase token
+GHL_LABEL="Acme Gym"          # optional friendly name
+GHL_AGENCY=acmeagency         # -> ~/.ghl/agencies/acmeagency.env supplies the Firebase token
 GHL_API_KEY=pit-xxxx...
 GHL_LOCATION_ID=AbCd123...
 ```

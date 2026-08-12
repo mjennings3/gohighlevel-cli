@@ -110,8 +110,8 @@ Two credential types, two scopes:
 A profile (`~/.ghl/<account>.env`):
 
 ```env
-GHL_LABEL="The Lift"          # optional friendly name in the picker
-GHL_AGENCY=gmm                # → ~/.ghl/agencies/gmm.env supplies the Firebase token
+GHL_LABEL="Acme Gym"          # optional friendly name in the picker
+GHL_AGENCY=acmeagency         # → ~/.ghl/agencies/acmeagency.env supplies the Firebase token
 GHL_API_KEY=pit-xxxxxxxx-...  # this sub-account's Private Integration Token
 GHL_LOCATION_ID=AbCd123...
 ```
